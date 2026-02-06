@@ -9,5 +9,7 @@ cargo generate --git https://github.com/esp-rs/esp-idf-template.git --name examp
 Flash/Monitor Outside Docker Container Run:
 ```
 espflash flash --chip esp32 --port COM5 path (.elf or .bin)
+```
+```
 espflash monitor --port COM5
 ```
