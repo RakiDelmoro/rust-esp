@@ -1,0 +1,11 @@
+{
+    "name": "rust-esp-examples",
+    "image": "espressif/idf-rust:all_latest",
+    "customizations": {
+        "vscode": {
+            "extensions": ["rust-lang.rust-analyzer"]
+        }
+    },
+    "runArgs": ["--privileged", "--device=/dev/ttyUSB0"],
+    "postCreateCommand": "cargo install cargo-generate"
+}
