@@ -7,12 +7,12 @@ use esp_idf_hal::gpio::{PinDriver, Pins};
 use esp_idf_hal::peripherals::Peripherals;
 use esp_idf_hal::adc::oneshot::config::AdcChannelConfig;
 use esp_idf_hal::adc::oneshot::{AdcChannelDriver, AdcDriver};
+use esp_idf_svc::hal::delay::FreeRtos;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::wifi::{EspWifi, ScanMethod};
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::mqtt::client::{EspMqttClient, MqttClientConfiguration, EventPayload, QoS};
 use esp_idf_svc::wifi::{AuthMethod, ClientConfiguration, Configuration};
-use esp_idf_svc::hal::delay::FreeRtos;
 
 // WiFi Configurations
 const WIFI_SSID: &str = "";
@@ -25,22 +25,22 @@ const MQTT_PASSWORD: &str = "";
 const MQTT_URL: &str = "";
 
 // Time configarutions
-const TIMEOUT_DURATION: i64 = 5_000_000;
+const TIMEOUT_DURATION: i64 = 3_000_000; // Timeout duration in microseconds
 const DEEP_SLEEP_DURATION_IN_SECONDS: u64 = 1 * 5;
 
 pub fn go_to_deep_sleep() -> ! {
-    FreeRtos::delay_ms(100); // Make sure all work is settled before going to deep sleep
     let sleep_time_duration = DEEP_SLEEP_DURATION_IN_SECONDS * 1_000_000;
 
     println!("Going to deep sleep for {} seconds...", DEEP_SLEEP_DURATION_IN_SECONDS);
     unsafe {esp_idf_svc::sys::esp_sleep_enable_timer_wakeup(sleep_time_duration);
-            esp_idf_svc::sys::esp_deep_sleep_start();}
+            esp_idf_svc::sys::esp_deep_sleep_start();
+        }
 }
 
 fn read_sensor(adc1: ADC1, pins: Pins) -> Result<(u16, u16), anyhow::Error> {
     let adc_reader = AdcDriver::new(adc1)?;
 
-    // Read water tank 1
+    // Water Tank 1
     let water_tank_1_level = {
         let mut water_tank_1_power_pin = PinDriver::output(pins.gpio13)?;
         water_tank_1_power_pin.set_high()?;
@@ -52,7 +52,7 @@ fn read_sensor(adc1: ADC1, pins: Pins) -> Result<(u16, u16), anyhow::Error> {
         tank_1_reading
     };
 
-    // Read water tank 2
+    // Water Tank 2
     let water_tank_2_level = {
         let mut water_tank_2_power_pin = PinDriver::output(pins.gpio5)?;
         water_tank_2_power_pin.set_high()?;
@@ -67,7 +67,7 @@ fn read_sensor(adc1: ADC1, pins: Pins) -> Result<(u16, u16), anyhow::Error> {
     anyhow::Ok((water_tank_1_level, water_tank_2_level))
 }
 
-// 
+
 fn wifi_setup(modem: Modem) -> anyhow::Result<EspWifi<'static>> {
     let ssid_as_heap_string: String<32> = String::try_from(WIFI_SSID).expect("SSID too long for buffer");
     let password_as_heap_string: String<64> = String::try_from(WIFI_PASSWORD).expect("PASSWORD too long for buffer");
@@ -87,8 +87,8 @@ fn wifi_setup(modem: Modem) -> anyhow::Result<EspWifi<'static>> {
         let now = unsafe {esp_idf_svc::sys::esp_timer_get_time()};
         if now - start_time > TIMEOUT_DURATION {go_to_deep_sleep();}
 
-        if wifi.is_connected()? && wifi.is_up()?  {
-            println!("WiFi connected and IP address acquired!"); // both should be true before doing MQTT work.
+        if wifi.is_connected()? && wifi.is_up()?  { // both should be true before doing MQTT work.
+            println!("WiFi connected and IP address acquired!"); 
             break;
         }
         FreeRtos::delay_ms(100); // Delay is unavoidable, but kept as short as possible
@@ -138,6 +138,10 @@ fn main() -> anyhow::Result<()> {
 
     let mut mqttclient = mqtt_client_event()?;
     mqttclient.publish(MQTT_TOPIC, QoS::AtLeastOnce, false, data.as_bytes())?;
+    mqttclient.publish(MQTT_TOPIC, QoS::AtLeastOnce, false, data.as_bytes())?;
+    mqttclient.publish(MQTT_TOPIC, QoS::AtLeastOnce, false, data.as_bytes())?;
+    
+    FreeRtos::delay_ms(100); // Ensure all tasks have completed before entering deep sleep
     wifi.disconnect()?;
     go_to_deep_sleep()
 }
