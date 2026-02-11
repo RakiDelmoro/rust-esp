@@ -1,18 +1,16 @@
 use anyhow;
-use esp_idf_hal::gpio::{InterruptType, PinDriver, Pull};
-use esp_idf_hal::modem::Modem;
-use esp_idf_hal::peripherals::Peripherals;
-use esp_idf_svc::eventloop::EspSystemEventLoop;
-use esp_idf_svc::mqtt::client::{
-    EspMqttClient, EspMqttConnection, EventPayload, MqttClientConfiguration, QoS,
-};
-use esp_idf_svc::nvs::EspDefaultNvsPartition;
-use esp_idf_svc::wifi::{AuthMethod, ClientConfiguration, Configuration, EspWifi, ScanMethod};
-use heapless::String;
 use log::info;
 use serde_json::json;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use heapless::String;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use esp_idf_hal::modem::Modem;
+use esp_idf_hal::peripherals::Peripherals;
+use esp_idf_hal::gpio::{InterruptType, PinDriver, Pull};
+use esp_idf_svc::eventloop::EspSystemEventLoop;
+use esp_idf_svc::mqtt::client::{EspMqttClient, EspMqttConnection, EventPayload, MqttClientConfiguration, QoS};
+use esp_idf_svc::nvs::EspDefaultNvsPartition;
+use esp_idf_svc::wifi::{AuthMethod, ClientConfiguration, Configuration, EspWifi, ScanMethod};
 
 // WiFi Configurations
 const WIFI_SSID: &str = "";
@@ -28,9 +26,7 @@ const MQTT_URL: &str = "";
 // Unlike `const`, it is not inlined and can be mutated (here safely via `AtomicU32`).
 static PULSE_COUNT: AtomicU32 = AtomicU32::new(0);
 
-fn time_now_in_millis() -> u64 {
-    unsafe { (esp_idf_svc::sys::esp_timer_get_time() / 1000) as u64 }
-}
+fn time_now_in_millis() -> u64 {unsafe { (esp_idf_svc::sys::esp_timer_get_time() / 1000) as u64 }}
 
 fn setup_wifi(modem: Modem) -> anyhow::Result<EspWifi<'static>> {
     let ssid_as_heap_string: String<32> = String::try_from(WIFI_SSID).expect("SSID too long");
@@ -138,10 +134,10 @@ fn main() -> anyhow::Result<()> {
     info!("Sensor reading continues regardless of WiFi/MQTT state");
 
     let mut last_sample_time = time_now_in_millis();
-    let last_pulse_count: u32 = PULSE_COUNT.load(Ordering::Relaxed);
+    let mut last_pulse_count: u32 = PULSE_COUNT.load(Ordering::Relaxed);
     loop {
-        flow_pin.enable_interrupt()?;
-        if time_now_in_millis() - last_sample_time < 1_000 {continue;}
+        flow_pin.enable_interrupt()?; // Start accumulate
+        if time_now_in_millis() - last_sample_time < 1_000 {continue;} // Skip to the next iteration of a loop
 
         let now = time_now_in_millis();
         let pulses = PULSE_COUNT.load(Ordering::Relaxed);
@@ -154,8 +150,8 @@ fn main() -> anyhow::Result<()> {
         
         match mqtt_client.publish(MQTT_TOPIC,QoS::AtLeastOnce,false, payload.to_string().as_bytes()) {
                 Ok(_) => {
-
-                    last_sample_time = now;
+                    last_pulse_count += pulse_delta;
+                    last_sample_time += time_delta;
                 }
                 Err(e) => {
                     info!("Failed to publish data: {:?}", e);
@@ -163,4 +159,3 @@ fn main() -> anyhow::Result<()> {
         }
     }
 }
-
